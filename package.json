@@ -44,5 +44,8 @@
     "cybersecurity",
     "ai-agents",
     "rate-limiting"
-  ]
+  ],
+  "dependencies": {
+    "web-bot-auth": "^0.1.3"
+  }
 }

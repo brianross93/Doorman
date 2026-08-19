@@ -1,13 +1,33 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { signatureHeaders } from "web-bot-auth";
+import { signerFromJWK } from "web-bot-auth/crypto";
 import {
   classifyInitialDoormanRequest,
+  createCloudflareIdentityProvider,
   createDoorman,
+  createRegistryIdentityProvider,
+  createWebBotAuthIdentityProvider,
   normalizeDoormanPath,
   recommendationForRisk,
   riskBand,
   routeShape,
 } from "../src/index.mjs";
+
+const TEST_PRIVATE_JWK = {
+  kty: "OKP",
+  crv: "Ed25519",
+  kid: "test-key-ed25519",
+  d: "n4Ni-HpISpVObnQMW0wOhCKROaIKqKtW_2ZYb2p9KcU",
+  x: "JrQLj5P_89iXES9-vFgrIy29clF9CC_oPPsw3c5D0bs",
+};
+
+const TEST_PUBLIC_JWK = {
+  kty: "OKP",
+  crv: "Ed25519",
+  kid: "test-key-ed25519",
+  x: "JrQLj5P_89iXES9-vFgrIy29clF9CC_oPPsw3c5D0bs",
+};
 
 test("known crawler identity stays separate from risk", () => {
   const result = classifyInitialDoormanRequest({
@@ -18,6 +38,19 @@ test("known crawler identity stays separate from risk", () => {
   assert.equal(result.classification, "known_crawler");
   assert.equal(result.automationConfidence, 100);
   assert.equal(result.riskScore, 4);
+  assert.equal(result.identity.assurance, "self_declared");
+  assert.equal(result.identity.verified, false);
+});
+
+test("a claimed crawler identity does not suppress behavioral risk", () => {
+  const result = classifyInitialDoormanRequest({
+    userAgent: "Googlebot/2.1",
+    path: "/wp-admin/install.php",
+  });
+  assert.equal(result.classification, "known_crawler");
+  assert.equal(result.identity.assurance, "self_declared");
+  assert.equal(riskBand(result.riskScore), "high");
+  assert.match(result.evidence.join(" "), /exploit-probe/i);
 });
 
 test("automation clients are identified without calling them malicious", () => {
@@ -83,4 +116,176 @@ test("sites can add their own identity rules", () => {
   });
   assert.equal(result.classification, "known_crawler");
   assert.equal(result.userAgentLabel, "Community archive");
+});
+
+test("a registry match is listed identity evidence, not verified identity", async () => {
+  const doorman = createDoorman({
+    identityProviders: [
+      createRegistryIdentityProvider([
+        {
+          name: "Community Research Crawler",
+          operator: "Community Lab",
+          purpose: "research",
+          kind: "BOT",
+          userAgentPatterns: ["CommunityResearchBot/*"],
+        },
+      ]),
+    ],
+  });
+  const result = await doorman.inspectRequest(new Request("https://example.com/public", {
+    headers: { "user-agent": "CommunityResearchBot/1.0" },
+  }));
+  assert.equal(result.classification, "known_crawler");
+  assert.equal(result.identity.assurance, "directory_listed");
+  assert.equal(result.identity.verified, false);
+  assert.equal(result.identity.operator, "Community Lab");
+});
+
+test("Cloudflare metadata is ignored unless the host marks it trusted", async () => {
+  const request = new Request("https://example.com", {
+    headers: { "user-agent": "Research-Agent/1.0" },
+  });
+  Object.defineProperty(request, "cf", {
+    value: { botManagement: { signedAgent: true, score: 1 } },
+  });
+  const doorman = createDoorman({
+    identityProviders: [createCloudflareIdentityProvider()],
+  });
+  const result = await doorman.inspectRequest(request);
+  assert.equal(result.classification, "unknown");
+  assert.equal(result.identity, null);
+});
+
+test("trusted Cloudflare signed-agent metadata produces provider-attested identity", async () => {
+  const doorman = createDoorman({
+    identityProviders: [createCloudflareIdentityProvider({ trusted: true })],
+  });
+  const result = await doorman.inspectRequest(
+    new Request("https://example.com", { headers: { "user-agent": "Research-Agent/1.0" } }),
+    {
+      cloudflare: {
+        botManagement: { signedAgent: true, score: 1 },
+        verifiedBotCategory: "AI Assistant",
+      },
+      cloudflareIdentity: {
+        name: "Research Agent",
+        operator: "Community Lab",
+      },
+    },
+  );
+  assert.equal(result.classification, "verified_agent");
+  assert.equal(result.identity.assurance, "provider_attested");
+  assert.equal(result.identity.verified, true);
+  assert.equal(result.riskScore, 5);
+});
+
+test("Cloudflare bot score can raise automation confidence without raising risk", async () => {
+  const doorman = createDoorman({
+    identityProviders: [createCloudflareIdentityProvider({ trusted: true })],
+  });
+  const result = await doorman.inspectRequest(
+    new Request("https://example.com", { headers: { "user-agent": "Mozilla/5.0" } }),
+    { cloudflare: { botManagement: { score: 2 } } },
+  );
+  assert.equal(result.classification, "likely_automation");
+  assert.ok(result.automationConfidence >= 98);
+  assert.equal(result.riskScore, 5);
+});
+
+test("an unavailable identity provider does not break request inspection", async () => {
+  const doorman = createDoorman({
+    identityProviders: [async () => {
+      throw new Error("directory offline");
+    }],
+  });
+  const result = await doorman.inspectRequest(new Request("https://example.com"));
+  assert.equal(result.classification, "unknown");
+  assert.match(result.evidence.join(" "), /continued without it/i);
+});
+
+async function signedRequest(url = "https://example.com/resource") {
+  const signatureAgent = "https://agent.example/.well-known/http-message-signature-directory";
+  const unsigned = new Request(url, {
+    headers: {
+      "signature-agent": `"${signatureAgent}"`,
+      "user-agent": "Research-Agent/1.0",
+    },
+  });
+  const now = new Date();
+  const signed = await signatureHeaders(
+    unsigned,
+    await signerFromJWK(TEST_PRIVATE_JWK),
+    { created: now, expires: new Date(now.getTime() + 300_000) },
+  );
+  return new Request(url, {
+    headers: {
+      "signature-agent": `"${signatureAgent}"`,
+      "user-agent": "Research-Agent/1.0",
+      Signature: signed.Signature,
+      "Signature-Input": signed["Signature-Input"],
+    },
+  });
+}
+
+test("Web Bot Auth verifies a signed request with a trusted public key", async () => {
+  const doorman = createDoorman({
+    identityProviders: [
+      createWebBotAuthIdentityProvider({
+        resolveKey: async ({ keyid, signatureAgent }) => {
+          assert.ok(keyid);
+          assert.equal(
+            signatureAgent,
+            "https://agent.example/.well-known/http-message-signature-directory",
+          );
+          return {
+            jwk: TEST_PUBLIC_JWK,
+            identity: {
+              type: "agent",
+              name: "Test Research Agent",
+              operator: "Community Lab",
+              purpose: "research",
+            },
+          };
+        },
+      }),
+    ],
+  });
+  const result = await doorman.inspectRequest(await signedRequest());
+  assert.equal(result.classification, "verified_agent");
+  assert.equal(result.identity.assurance, "cryptographic");
+  assert.equal(result.identity.name, "Test Research Agent");
+  assert.equal(result.identity.verified, true);
+  assert.match(result.evidence.join(" "), /signature verified/i);
+});
+
+test("a failed signature for a trusted key adds risk and never verifies identity", async () => {
+  const valid = await signedRequest();
+  const tampered = new Request("https://different.example/resource", {
+    headers: valid.headers,
+  });
+  const doorman = createDoorman({
+    identityProviders: [
+      createWebBotAuthIdentityProvider({
+        resolveKey: async () => ({ jwk: TEST_PUBLIC_JWK }),
+      }),
+    ],
+  });
+  const result = await doorman.inspectRequest(tampered);
+  assert.notEqual(result.classification, "verified_agent");
+  assert.equal(result.identity, null);
+  assert.equal(result.riskScore, 25);
+  assert.match(result.evidence.join(" "), /verification failed/i);
+});
+
+test("a signed request with no trusted key remains unverified without a penalty", async () => {
+  const doorman = createDoorman({
+    identityProviders: [
+      createWebBotAuthIdentityProvider({ resolveKey: async () => null }),
+    ],
+  });
+  const result = await doorman.inspectRequest(await signedRequest());
+  assert.notEqual(result.classification, "verified_agent");
+  assert.equal(result.identity, null);
+  assert.equal(result.riskScore, 5);
+  assert.match(result.evidence.join(" "), /no trusted key/i);
 });
