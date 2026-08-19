@@ -1,59 +1,147 @@
 # Doorman
 
-Doorman is an explainable traffic classifier for small websites. It keeps two questions separate:
+Doorman gives small organizations a clear view of website traffic. It identifies people, verified agents, known crawlers, likely automation, and unknown clients. It also scores risky behavior and explains each result.
 
-1. What is visiting the site: a human, verified agent, known crawler, likely automation, or an unknown client?
-2. Is the visitor behaving in a risky way?
+Small businesses, schools, nonprofits, civic groups, and community organizations can use Doorman without a dedicated security team. One small package provides useful traffic evidence in plain language.
 
-The package uses deterministic rules. It does not claim that all automation is harmful, and it does not put a language model in the blocking path.
+## What Doorman provides
+
+Doorman answers two separate questions for each visitor:
+
+1. What type of visitor is this?
+2. How risky is its current behavior?
+
+The package returns:
+
+- a visitor classification;
+- classification confidence;
+- automation confidence;
+- a risk score from 0 to 100;
+- a readable client label;
+- verified identity data when available;
+- evidence for the result.
+
+Your application can store these results, show them in a dashboard, and apply its own traffic policy.
+
+## Requirements
+
+- Node.js 18 or a later version
+- A server that can read HTTP request headers
+- A storage system for traffic history, if you want session analysis
+
+Doorman supports the standard Web `Request` interface. You can use it with Node.js frameworks, serverless functions, and edge platforms.
 
 ## Install
 
-Install the current open-source package directly from GitHub:
+Install the current public release from GitHub:
 
 ```sh
 npm install github:brianross93/Doorman
 ```
 
-After the package is published to the npm registry:
+Use this command after the package becomes available in the npm registry:
 
 ```sh
 npm install doorman-traffic
 ```
 
-## Inspect a request
+## Inspect your first request
+
+Create one Doorman instance when your server starts:
 
 ```js
 import { createDoorman } from "doorman-traffic";
 
 const doorman = createDoorman({ mode: "observe" });
+```
+
+Pass each server request to `inspectRequest`:
+
+```js
+const result = await doorman.inspectRequest(request);
+
+console.log(result.classification);
+console.log(result.riskScore);
+console.log(result.evidence);
+```
+
+Start with `observe` mode. Review the results before you connect them to a blocking policy.
+
+## Understand the result
+
+A result has this structure:
+
+```js
+{
+  classification: "likely_automation",
+  classificationConfidence: 94,
+  automationConfidence: 97,
+  riskScore: 82,
+  userAgentLabel: "Unidentified exploit scanner",
+  identity: null,
+  evidence: [
+    "Common exploit-probe route requested",
+    "No normal browser navigation headers received"
+  ]
+}
+```
+
+Doorman uses these classifications:
+
+| Classification | Meaning |
+| --- | --- |
+| `human` | Browser activity has normal interactive signals. |
+| `verified_agent` | A trusted provider or cryptographic signature verified an agent. |
+| `verified_bot` | A trusted provider verified an automated service. |
+| `known_crawler` | The client matches a known crawler identity. |
+| `likely_automation` | Request signals strongly indicate automated software. |
+| `unknown` | The available signals support more than one explanation. |
+
+Use `riskScore` for behavior. Use `classification` for visitor type. Keep these decisions separate.
+
+## Add request context
+
+You can inspect selected request data directly:
+
+```js
 const result = doorman.inspect({
   userAgent: request.headers.get("user-agent"),
   path: new URL(request.url).pathname,
   browserNavigation: request.headers.get("sec-fetch-mode") === "navigate",
+  signaturePresented:
+    request.headers.has("signature") &&
+    request.headers.has("signature-input"),
+  agentCredentialPresented:
+    request.headers.get("authorization")?.startsWith("Bearer ") ?? false,
 });
 ```
 
-The result contains the classification, confidence, automation confidence, risk score, evidence, and a readable client label. Your application decides how to store sessions and whether to enforce a policy.
+Store the result with a privacy-safe session identifier. Add request counts, route counts, error counts, and time windows in your application. These values help you identify scraping, enumeration, repeated failures, and high request volume.
 
-## Identity and risk are separate
+## Add the optional browser beacon
 
-Doorman records identity assurance independently from behavior:
+The browser beacon adds interaction signals from your own pages:
 
-- `self_declared`: a recognized user-agent string. Easy to spoof.
-- `directory_listed`: a user agent matches a known bot directory. This identifies a claim, not the request.
-- `provider_attested`: a trusted edge provider identifies a verified bot or signed agent.
-- `cryptographic`: the request passed Web Bot Auth signature verification with a trusted public key.
+```js
+import { startDoormanBeacon } from "doorman-traffic/client";
 
-A verified agent can still behave badly. A crawler can be legitimate and low risk. An unknown client can be harmless. Doorman does not lower a risk score just because a client claims a familiar identity.
+const stop = startDoormanBeacon({
+  endpoint: "/api/doorman/beacon",
+});
+```
 
-A hidden crawler-trap request is strong evidence of automation, but it is not malicious by itself. The default engine keeps a trap-only visitor at low risk. Hosts should escalate only when the trap signal appears with abusive behavior such as rapid scraping, sequential enumeration, repeated errors, or exploit probing.
+The beacon sends:
 
-`trafficRoleHypothesis()` can present sparse, low-risk, browser-like trap traffic as a **Likely Browser Agent**. This is a useful operational hypothesis, not verified identity: the same pattern can come from an in-chat agent, crawler, scanner, preview service, or scripted browser.
+- event counts;
+- session duration;
+- page visibility;
+- the browser `webdriver` flag.
 
-## Identity providers
+These small signals help your server distinguish interactive browsing from automated access. Your beacon endpoint must connect the signal to the correct traffic session.
 
-Use one or more providers when you inspect the original `Request`:
+## Add a known-client directory
+
+Use a directory when your organization recognizes specific crawlers or agents:
 
 ```js
 import {
@@ -71,13 +159,17 @@ const directory = createRegistryIdentityProvider([
   },
 ]);
 
-const doorman = createDoorman({ identityProviders: [directory] });
-const result = await doorman.inspectRequest(request);
+const doorman = createDoorman({
+  mode: "observe",
+  identityProviders: [directory],
+});
 ```
 
-### Web Bot Auth
+A directory match supplies listed identity evidence. Use stronger assurance for verified identity.
 
-Doorman uses the open-source `web-bot-auth` verifier. The host supplies a trusted public-key resolver:
+## Verify agents with Web Bot Auth
+
+Web Bot Auth uses HTTP message signatures. Supply a trusted public-key resolver:
 
 ```js
 import {
@@ -87,8 +179,13 @@ import {
 
 const webBotAuth = createWebBotAuthIdentityProvider({
   async resolveKey({ keyid, signatureAgent }) {
-    const record = await trustedDirectory.lookup({ keyid, signatureAgent });
+    const record = await trustedDirectory.lookup({
+      keyid,
+      signatureAgent,
+    });
+
     if (!record) return null;
+
     return {
       jwk: record.publicJwk,
       identity: {
@@ -101,15 +198,17 @@ const webBotAuth = createWebBotAuthIdentityProvider({
   },
 });
 
-const doorman = createDoorman({ identityProviders: [webBotAuth] });
-const result = await doorman.inspectRequest(request);
+const doorman = createDoorman({
+  mode: "observe",
+  identityProviders: [webBotAuth],
+});
 ```
 
-The core package does not fetch an arbitrary `Signature-Agent` URL during a request. The host must validate and cache key directories, which avoids adding an unsafe server-side fetch path.
+Resolve keys from a directory that you trust. Validate and cache directory records before request processing.
 
-### Cloudflare
+## Use trusted Cloudflare signals
 
-If the application runs in a Cloudflare environment, Doorman can consume trusted Bot Management request metadata:
+Applications on Cloudflare can use Bot Management data from the platform request object:
 
 ```js
 import {
@@ -118,39 +217,94 @@ import {
 } from "doorman-traffic";
 
 const cloudflare = createCloudflareIdentityProvider({ trusted: true });
-const doorman = createDoorman({ identityProviders: [cloudflare] });
+
+const doorman = createDoorman({
+  mode: "observe",
+  identityProviders: [cloudflare],
+});
+
 const result = await doorman.inspectRequest(request, {
   cloudflare: request.cf,
 });
 ```
 
-Set `trusted: true` only when the metadata comes from the platform request object. Do not copy untrusted HTTP headers into this adapter.
+Set `trusted: true` only for metadata from the Cloudflare platform request object.
 
-Cloudflare Radar also publishes a verified-bot directory. `fetchCloudflareRadarDirectory` can download a snapshot with a Cloudflare API token. Pass that snapshot to `createRegistryIdentityProvider`; do not call Radar on every visitor request.
+Cloudflare Radar publishes a verified-bot directory. Use `fetchCloudflareRadarDirectory` to download a snapshot. Cache the snapshot, then pass it to `createRegistryIdentityProvider`.
 
-## Optional browser beacon
+## Apply a traffic policy
+
+Doorman supplies evidence and scores. Your server applies the control.
+
+Use these stages:
+
+1. Observe traffic.
+2. Review classifications and risk scores.
+3. Set limits for your site.
+4. Add rate limits for repeated high-volume access.
+5. Add temporary blocks for high-risk sessions.
+6. Record each control and its reason.
+7. Provide a reset or allow action for an administrator.
+
+This example shows a simple high-risk response:
 
 ```js
-import { startDoormanBeacon } from "doorman-traffic/client";
+const result = await doorman.inspectRequest(request);
 
-const stop = startDoormanBeacon({ endpoint: "/api/doorman/beacon" });
+if (result.riskScore >= 80) {
+  return new Response("Request blocked by site policy", {
+    status: 403,
+  });
+}
 ```
 
-The beacon sends only event counts, session duration, page visibility, and the browser's `webdriver` flag. It does not capture typed text or pointer coordinates. A missing beacon is evidence, not proof of automation.
+Combine the request result with session history before you enforce production traffic controls.
 
-## Product boundary
+## Protect visitor privacy
 
-This package owns classification, identity-provider adapters, risk scoring, route shaping, evidence, and the optional browser beacon. The host application owns storage, trusted key-directory policy, dashboards, notifications, and enforcement. This keeps the engine reusable without requiring a specific database, framework, edge provider, or hosted service.
+Collect the minimum data needed for a useful decision.
 
-## Safety defaults
+- Hash network identifiers before storage.
+- Remove query strings from stored routes.
+- Store route shapes instead of private resource identifiers.
+- Store event counts instead of typed text or pointer coordinates.
+- Set a short retention period for routine traffic events.
+- Keep administrator actions in an audit record.
 
-- Observe first.
-- Explain every classification.
-- Keep identity separate from risk.
-- Treat a self-declared user agent as evidence, not proof.
-- Resolve signed-agent keys from a trusted, validated directory.
-- Never collect request bodies, credentials, typed keys, or exact pointer coordinates.
+## Run the tests
+
+Clone the repository. Then install dependencies and run the test suite:
+
+```sh
+npm install
+npm test
+```
+
+The tests cover crawler identity, automation signals, exploit probes, route shaping, Cloudflare metadata, Web Bot Auth, and browser-agent hypotheses.
+
+## Package boundary
+
+The package provides:
+
+- request classification;
+- identity-provider adapters;
+- risk scoring;
+- route shaping;
+- evidence;
+- an optional browser beacon.
+
+The host application provides:
+
+- session storage;
+- the traffic dashboard;
+- alerts;
+- trusted directory policy;
+- rate limits and blocks;
+- administrator access control;
+- retention policy.
+
+This boundary keeps Doorman portable across frameworks, databases, and hosting providers.
 
 ## License
 
-MIT
+Doorman uses the MIT License.
