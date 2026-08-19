@@ -35,6 +35,7 @@ const DEFAULT_AUTOMATION_CLIENTS = [
 ];
 
 const EXPLOIT_PROBE = /\/(?:wp-admin|wp-login|phpmyadmin|\.env)(?:\/|$)|\/xmlrpc\.php$/i;
+const CRAWLER_TRAP = /^\/doorman-trap(?:\/|$)/i;
 
 export const DOORMAN_CLASSIFICATIONS = Object.freeze([
   "human",
@@ -111,6 +112,19 @@ function initialInspection(input, knownCrawlers, automationClients) {
     automationConfidence = Math.max(automationConfidence, 98);
     riskScore = Math.max(riskScore, 86);
     evidence.push("Common exploit-probe route requested");
+  }
+
+  if (CRAWLER_TRAP.test(path)) {
+    if (!identity) {
+      classification = "likely_automation";
+      classificationConfidence = Math.max(classificationConfidence, 92);
+    }
+    automationConfidence = Math.max(automationConfidence, 94);
+    riskScore = Math.max(riskScore, 28);
+    evidence.push(
+      "Hidden crawler trap requested",
+      "Trap access indicates automation but is not malicious by itself",
+    );
   }
 
   if (input.signaturePresented && !identity) {

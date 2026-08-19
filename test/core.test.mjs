@@ -64,6 +64,20 @@ test("automation clients are identified without calling them malicious", () => {
   assert.ok(result.riskScore < 20);
 });
 
+test("a crawler trap indicates automation without calling the visitor malicious", () => {
+  const result = classifyInitialDoormanRequest({
+    userAgent:
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 Version/13.0.3 Mobile/15E148 Safari/604.1",
+    path: "/doorman-trap/7d92",
+    browserNavigation: true,
+  });
+  assert.equal(result.classification, "likely_automation");
+  assert.ok(result.automationConfidence >= 90);
+  assert.equal(riskBand(result.riskScore), "low");
+  assert.match(recommendationForRisk(result.riskScore), /allow/i);
+  assert.match(result.evidence.join(" "), /not malicious by itself/i);
+});
+
 test("ordinary browser navigation stays unknown until a beacon arrives", () => {
   const result = classifyInitialDoormanRequest({
     userAgent: "Mozilla/5.0 Chrome/136.0.0.0 Safari/537.36",

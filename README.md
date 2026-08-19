@@ -47,6 +47,8 @@ Doorman records identity assurance independently from behavior:
 
 A verified agent can still behave badly. A crawler can be legitimate and low risk. An unknown client can be harmless. Doorman does not lower a risk score just because a client claims a familiar identity.
 
+A hidden crawler-trap request is strong evidence of automation, but it is not malicious by itself. The default engine keeps a trap-only visitor at low risk. Hosts should escalate only when the trap signal appears with abusive behavior such as rapid scraping, sequential enumeration, repeated errors, or exploit probing.
+
 ## Identity providers
 
 Use one or more providers when you inspect the original `Request`:
