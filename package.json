@@ -1,0 +1,44 @@
+{
+  "name": "@rigorloop/doorman",
+  "version": "0.1.0",
+  "description": "Explainable traffic classification and risk scoring for small websites.",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/brianross93/Doorman.git"
+  },
+  "homepage": "https://github.com/brianross93/Doorman#readme",
+  "bugs": {
+    "url": "https://github.com/brianross93/Doorman/issues"
+  },
+  "sideEffects": false,
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "import": "./src/index.mjs"
+    },
+    "./client": {
+      "types": "./src/client.d.ts",
+      "import": "./src/client.mjs"
+    }
+  },
+  "scripts": {
+    "test": "node --test test"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "bot-detection",
+    "traffic-observability",
+    "cybersecurity",
+    "ai-agents",
+    "rate-limiting"
+  ]
+}
