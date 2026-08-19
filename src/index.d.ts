@@ -148,4 +148,21 @@ export function routeShape(value: unknown): string;
 export function browserLabel(userAgent: string): string;
 export function riskBand(score: number): "low" | "medium" | "high";
 export function classificationLabel(classification: string): string;
+export function trafficRoleHypothesis(input?: {
+  classification?: string;
+  classificationConfidence?: number;
+  riskScore?: number;
+  requestCount?: number;
+  errorCount?: number;
+  trapHits?: number;
+  userAgent?: string;
+  userAgentExcerpt?: string;
+  evidence?: string[];
+}): {
+  key: string;
+  label: string;
+  confidence: number;
+  verified: boolean;
+  explanation: string | null;
+};
 export function recommendationForRisk(score: number): string;

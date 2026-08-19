@@ -12,6 +12,7 @@ import {
   recommendationForRisk,
   riskBand,
   routeShape,
+  trafficRoleHypothesis,
 } from "../src/index.mjs";
 
 const TEST_PRIVATE_JWK = {
@@ -76,6 +77,43 @@ test("a crawler trap indicates automation without calling the visitor malicious"
   assert.equal(riskBand(result.riskScore), "low");
   assert.match(recommendationForRisk(result.riskScore), /allow/i);
   assert.match(result.evidence.join(" "), /not malicious by itself/i);
+});
+
+test("sparse browser-like trap traffic is presented as a likely browser agent", () => {
+  const hypothesis = trafficRoleHypothesis({
+    classification: "likely_automation",
+    classificationConfidence: 92,
+    riskScore: 28,
+    requestCount: 1,
+    errorCount: 0,
+    trapHits: 1,
+    userAgentExcerpt:
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 Version/13.0.3 Mobile/15E148 Safari/604.1",
+    evidence: [
+      "Hidden crawler trap requested",
+      "Trap access indicates automation but is not malicious by itself",
+    ],
+  });
+  assert.equal(hypothesis.key, "likely_browser_agent");
+  assert.equal(hypothesis.label, "Likely Browser Agent");
+  assert.equal(hypothesis.verified, false);
+  assert.ok(hypothesis.confidence <= 70);
+  assert.match(hypothesis.explanation, /could also be a crawler/i);
+});
+
+test("abusive browser automation remains likely automation", () => {
+  const hypothesis = trafficRoleHypothesis({
+    classification: "likely_automation",
+    classificationConfidence: 97,
+    riskScore: 86,
+    requestCount: 94,
+    errorCount: 12,
+    trapHits: 1,
+    userAgentExcerpt: "Mozilla/5.0 HeadlessChrome/136.0.0.0 Safari/537.36",
+    evidence: ["Crawler trap access combined with abusive request behavior"],
+  });
+  assert.equal(hypothesis.key, "likely_automation");
+  assert.equal(hypothesis.label, "Likely Automation");
 });
 
 test("ordinary browser navigation stays unknown until a beacon arrives", () => {

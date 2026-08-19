@@ -49,6 +49,8 @@ A verified agent can still behave badly. A crawler can be legitimate and low ris
 
 A hidden crawler-trap request is strong evidence of automation, but it is not malicious by itself. The default engine keeps a trap-only visitor at low risk. Hosts should escalate only when the trap signal appears with abusive behavior such as rapid scraping, sequential enumeration, repeated errors, or exploit probing.
 
+`trafficRoleHypothesis()` can present sparse, low-risk, browser-like trap traffic as a **Likely Browser Agent**. This is a useful operational hypothesis, not verified identity: the same pattern can come from an in-chat agent, crawler, scanner, preview service, or scripted browser.
+
 ## Identity providers
 
 Use one or more providers when you inspect the original `Request`:

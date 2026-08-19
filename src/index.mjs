@@ -260,6 +260,50 @@ export function classificationLabel(classification) {
   }[classification] || "Unknown";
 }
 
+export function trafficRoleHypothesis(input = {}) {
+  const classification = String(input.classification || "unknown");
+  const classificationConfidence = clamp(input.classificationConfidence);
+  const riskScore = clamp(input.riskScore);
+  const requestCount = Math.max(0, Number(input.requestCount) || 0);
+  const errorCount = Math.max(0, Number(input.errorCount) || 0);
+  const trapHits = Math.max(0, Number(input.trapHits) || 0);
+  const userAgent = String(input.userAgentExcerpt || input.userAgent || "");
+  const evidence = Array.isArray(input.evidence)
+    ? input.evidence.filter((item) => typeof item === "string")
+    : [];
+  const evidenceText = evidence.join(" ");
+  const browserLike = /\b(?:Chrome|Chromium|Firefox|Safari|Edg|Mobile)\b/i.test(userAgent);
+  const abusiveBehavior =
+    riskScore >= 55 ||
+    errorCount >= 8 ||
+    /(?:exploit-probe|sequential resource enumeration|abusive request behavior)/i.test(evidenceText);
+
+  if (
+    classification === "likely_automation" &&
+    trapHits > 0 &&
+    requestCount <= 12 &&
+    browserLike &&
+    !abusiveBehavior
+  ) {
+    return {
+      key: "likely_browser_agent",
+      label: "Likely Browser Agent",
+      confidence: Math.min(70, Math.max(60, classificationConfidence)),
+      verified: false,
+      explanation:
+        "Browser-like automation followed an automated-only path without abusive behavior. It resembles an in-chat or browsing agent, but could also be a crawler, scanner, preview service, or scripted browser.",
+    };
+  }
+
+  return {
+    key: classification,
+    label: classificationLabel(classification),
+    confidence: classificationConfidence,
+    verified: classification === "verified_agent" || classification === "verified_bot",
+    explanation: null,
+  };
+}
+
 export function recommendationForRisk(score) {
   if (score >= 80) return "Block this visitor temporarily";
   if (score >= 55) return "Rate limit this visitor";
