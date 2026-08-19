@@ -14,6 +14,10 @@ The overview separates visitor identity from behavioral risk.
 
 ![Doorman dashboard overview](docs/dashboard-overview.png)
 
+The optional AI analyst explains the current dashboard data and recommends a clear next step.
+
+![Doorman AI analyst explaining a high-risk visitor](docs/ai-analyst.png)
+
 An expanded traffic session shows the evidence, risk score, and suggested action.
 
 ![Doorman traffic-session evidence and suggested action](docs/traffic-session-detail.png)
