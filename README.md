@@ -4,6 +4,18 @@ Doorman gives small organizations a clear view of website traffic. It identifies
 
 Small businesses, schools, nonprofits, civic groups, and community organizations can use Doorman without a dedicated security team. One small package provides useful traffic evidence in plain language.
 
+## Live example
+
+The screenshots below show Doorman installed in one production application. The package remains independent of the host application, framework, and database.
+
+The overview separates visitor identity from behavioral risk.
+
+![Doorman dashboard overview](docs/dashboard-overview.png)
+
+An expanded traffic session shows the evidence, risk score, and suggested action.
+
+![Doorman traffic-session evidence and suggested action](docs/traffic-session-detail.png)
+
 ## What Doorman provides
 
 Doorman answers two separate questions for each visitor:
@@ -304,6 +316,10 @@ The host application provides:
 - retention policy.
 
 This boundary keeps Doorman portable across frameworks, databases, and hosting providers.
+
+## Open-source components
+
+Doorman uses [`web-bot-auth`](https://www.npmjs.com/package/web-bot-auth) to verify HTTP message signatures. The package manifest records the dependency and version range.
 
 ## License
 
