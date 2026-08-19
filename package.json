@@ -30,6 +30,10 @@
     "./client": {
       "types": "./src/client.d.ts",
       "import": "./src/client.mjs"
+    },
+    "./analyst": {
+      "types": "./src/analyst.d.ts",
+      "import": "./src/analyst.mjs"
     }
   },
   "scripts": {

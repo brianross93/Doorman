@@ -4,6 +4,8 @@ Doorman gives small organizations a clear view of website traffic. It identifies
 
 Small businesses, schools, nonprofits, civic groups, and community organizations can use Doorman without a dedicated security team. One small package provides useful traffic evidence in plain language.
 
+Doorman also includes an optional AI analyst. It turns a privacy-safe traffic snapshot into a plain-English explanation of current risks, likely automation, and useful next actions. The analyst is read-only. It explains evidence and recommends controls; your application remains responsible for every block, rate limit, and allow decision.
+
 ## Live example
 
 The screenshots below show Doorman installed in one production application. The package remains independent of the host application, framework, and database.
@@ -40,6 +42,7 @@ Your application can store these results, show them in a dashboard, and apply it
 - Node.js 18 or a later version
 - A server that can read HTTP request headers
 - A storage system for traffic history, if you want session analysis
+- A server-side OpenAI API key, if you enable the optional AI analyst
 
 Doorman supports the standard Web `Request` interface. You can use it with Node.js frameworks, serverless functions, and edge platforms.
 
@@ -78,6 +81,40 @@ console.log(result.evidence);
 ```
 
 Start with `observe` mode. Review the results before you connect them to a blocking policy.
+
+## Add the optional AI analyst
+
+The AI analyst is a standalone Doorman capability. The host application supplies a privacy-safe dashboard snapshot and its own OpenAI API key. Doorman sends the snapshot through the OpenAI Responses API with response storage disabled.
+
+Keep the API key on your server. Do not put it in browser code or a public environment variable.
+
+```js
+import { createDoormanAnalyst } from "doorman-traffic/analyst";
+
+const analyst = createDoormanAnalyst({
+  apiKey: process.env.OPENAI_API_KEY,
+  model: process.env.DOORMAN_ANALYST_MODEL || "gpt-5.6-luna",
+});
+
+const result = await analyst.ask({
+  snapshot: {
+    windowHours: 24,
+    totals: dashboard.totals,
+    controls: dashboard.controls,
+    highestSignalSessions: dashboard.sessions,
+    privacyNote: "Network identifiers and full request headers are excluded.",
+  },
+  messages: [
+    { role: "user", content: "What needs my attention?" },
+  ],
+});
+
+console.log(result.answer);
+```
+
+Build the snapshot on your server. Include aggregate counts, risk scores, route shapes, request counts, control state, and short evidence strings. Keep API keys, cookies, authorization headers, raw network addresses, private query values, and data outside the analysis scope out of the snapshot.
+
+Request classification, risk scoring, identity checks, the browser beacon, and traffic enforcement remain available when the AI analyst is disabled. Enable the analyst when your team wants to ask questions about the dashboard in plain language.
 
 ## Understand the result
 
@@ -303,7 +340,8 @@ The package provides:
 - risk scoring;
 - route shaping;
 - evidence;
-- an optional browser beacon.
+- an optional browser beacon;
+- an optional, host-configured AI analyst.
 
 The host application provides:
 
