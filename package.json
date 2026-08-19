@@ -1,5 +1,5 @@
 {
-  "name": "@rigorloop/doorman",
+  "name": "doorman-traffic",
   "version": "0.1.0",
   "description": "Explainable traffic classification and risk scoring for small websites.",
   "type": "module",
@@ -11,6 +11,10 @@
   "homepage": "https://github.com/brianross93/Doorman#readme",
   "bugs": {
     "url": "https://github.com/brianross93/Doorman/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
   },
   "sideEffects": false,
   "files": [

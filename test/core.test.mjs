@@ -12,7 +12,7 @@ import {
 test("known crawler identity stays separate from risk", () => {
   const result = classifyInitialDoormanRequest({
     userAgent: "Mozilla/5.0 AppleWebKit/537.36; compatible; GPTBot/1.3",
-    path: "/experts",
+    path: "/records",
     browserNavigation: false,
   });
   assert.equal(result.classification, "known_crawler");
@@ -34,7 +34,7 @@ test("automation clients are identified without calling them malicious", () => {
 test("ordinary browser navigation stays unknown until a beacon arrives", () => {
   const result = classifyInitialDoormanRequest({
     userAgent: "Mozilla/5.0 Chrome/136.0.0.0 Safari/537.36",
-    path: "/experts",
+    path: "/records",
     browserNavigation: true,
   });
   assert.equal(result.classification, "unknown");
@@ -66,8 +66,8 @@ test("common exploit probes are high risk", () => {
 
 test("route shaping groups resources without retaining query strings", () => {
   assert.equal(
-    routeShape("/experts/9df551f7-211a-430c-95ea-05796220760e?secret=no"),
-    "/experts/:id",
+    routeShape("/records/9df551f7-211a-430c-95ea-05796220760e?secret=no"),
+    "/records/:id",
   );
   assert.equal(routeShape("/profiles/12345"), "/profiles/:id");
   assert.equal(normalizeDoormanPath("claims?page=2"), "/claims");

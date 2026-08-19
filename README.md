@@ -1,4 +1,4 @@
-# RigorLoop Doorman
+# Doorman
 
 Doorman is an explainable traffic classifier for small websites. It keeps two questions separate:
 
@@ -15,16 +15,16 @@ Install the current open-source package directly from GitHub:
 npm install github:brianross93/Doorman
 ```
 
-After the package is published to the npm registry:
+Install from the npm registry:
 
 ```sh
-npm install @rigorloop/doorman
+npm install doorman-traffic
 ```
 
 ## Inspect a request
 
 ```js
-import { createDoorman } from "@rigorloop/doorman";
+import { createDoorman } from "doorman-traffic";
 
 const doorman = createDoorman({ mode: "observe" });
 const result = doorman.inspect({
@@ -38,12 +38,12 @@ The result contains the classification, confidence, automation confidence, risk 
 
 ## Agent identity is an adapter
 
-Doorman does not require a RigorLoop account and does not recognize RigorLoop API keys. A host site can connect any trusted identity system, including its own API keys or a Web Bot Auth verifier, then mark that traffic as a verified agent in its storage adapter. Unsigned traffic can still be classified by behavior, but it is never presented as cryptographically verified.
+Doorman does not require an account or a specific identity provider. A host site can connect any trusted identity system, including its own API keys or a Web Bot Auth verifier, then mark that traffic as a verified agent in its storage adapter. Unsigned traffic can still be classified by behavior, but it is never presented as cryptographically verified.
 
 ## Optional browser beacon
 
 ```js
-import { startDoormanBeacon } from "@rigorloop/doorman/client";
+import { startDoormanBeacon } from "doorman-traffic/client";
 
 const stop = startDoormanBeacon({ endpoint: "/api/doorman/beacon" });
 ```
@@ -52,7 +52,7 @@ The beacon sends only event counts, session duration, page visibility, and the b
 
 ## Product boundary
 
-This package owns classification, risk scoring, route shaping, evidence, and the optional browser beacon. The host application owns storage, identity verification, dashboards, notifications, and enforcement. This keeps the engine reusable without requiring a vendor database, framework, or RigorLoop service.
+This package owns classification, risk scoring, route shaping, evidence, and the optional browser beacon. The host application owns storage, identity verification, dashboards, notifications, and enforcement. This keeps the engine reusable without requiring a specific database, framework, or hosted service.
 
 ## Safety defaults
 
