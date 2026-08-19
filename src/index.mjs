@@ -108,6 +108,7 @@ function initialInspection(input, knownCrawlers, automationClients) {
     if (!identity) {
       classification = "likely_automation";
       classificationConfidence = Math.max(classificationConfidence, 97);
+      userAgentLabel = "Unidentified exploit scanner";
     }
     automationConfidence = Math.max(automationConfidence, 98);
     riskScore = Math.max(riskScore, 86);

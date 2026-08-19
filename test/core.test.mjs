@@ -145,6 +145,7 @@ test("common exploit probes are high risk", () => {
     browserNavigation: false,
   });
   assert.equal(result.classification, "likely_automation");
+  assert.equal(result.userAgentLabel, "Unidentified exploit scanner");
   assert.equal(riskBand(result.riskScore), "high");
   assert.match(recommendationForRisk(result.riskScore), /block/i);
 });
